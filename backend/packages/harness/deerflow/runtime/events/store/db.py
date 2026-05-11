@@ -57,8 +57,53 @@ class DbRunEventStore(RunEventStore):
         return content, metadata or {}
 
     @staticmethod
+    def _format_file_size(size_value: Any) -> str:
+        if isinstance(size_value, str):
+            try:
+                size_value = float(size_value)
+            except ValueError:
+                return size_value
+        if not isinstance(size_value, (int, float)):
+            return "0.0 KB"
+        size_kb = float(size_value) / 1024.0
+        return f"{size_kb:.1f} KB" if size_kb < 1024 else f"{size_kb / 1024:.1f} MB"
+
+    @classmethod
+    def _extract_turn_files(cls, content: Any) -> list[dict[str, str]] | None:
+        if not isinstance(content, dict):
+            return None
+        additional_kwargs = content.get("additional_kwargs")
+        if not isinstance(additional_kwargs, dict):
+            return None
+        files = additional_kwargs.get("files")
+        if not isinstance(files, list) or not files:
+            return None
+        turn_files: list[dict[str, str]] = []
+        for file_item in files:
+            if not isinstance(file_item, dict):
+                continue
+            filename = file_item.get("filename") or ""
+            if not isinstance(filename, str) or not filename:
+                continue
+            path = file_item.get("path")
+            if not isinstance(path, str) or not path:
+                path = f"/mnt/user-data/uploads/{filename}"
+            turn_files.append(
+                {
+                    "filename": filename,
+                    "path": path,
+                    "size": cls._format_file_size(file_item.get("size")),
+                    "status": str(file_item.get("status") or "uploaded"),
+                }
+            )
+        return turn_files if turn_files else None
+
+    @staticmethod
     def _content_to_db(content: Any, metadata: dict | None) -> tuple[str, dict]:
         metadata = metadata or {}
+        turn_files = DbRunEventStore._extract_turn_files(content)
+        if turn_files:
+            metadata = {**metadata, "turn_files": turn_files}
         if isinstance(content, str):
             return content, metadata
 
