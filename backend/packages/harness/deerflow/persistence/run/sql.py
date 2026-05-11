@@ -222,7 +222,7 @@ class RunRepository(RunStore):
                 func.coalesce(func.sum(RunRow.middleware_tokens), 0).label("middleware"),
             )
             .where(_thread, _completed)
-            .group_by(func.coalesce(RunRow.model_name, "unknown"))
+            .group_by(RunRow.model_name)
         )
 
         async with self._sf() as session:
