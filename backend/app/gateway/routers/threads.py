@@ -701,7 +701,7 @@ def _enrich_event_store_messages_with_checkpoint_files(
     checkpoint_messages: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Backfill uploaded-file metadata from checkpoint messages into event-store messages."""
-    files_by_text: dict[str, list[list[dict[str, Any]]]] = {}
+    grouped_files_by_text: dict[str, list[list[dict[str, Any]]]] = {}
     for msg in checkpoint_messages:
         if not isinstance(msg, dict) or msg.get("type") != "human" or msg.get("name") == "summary":
             continue
@@ -709,9 +709,9 @@ def _enrich_event_store_messages_with_checkpoint_files(
         if files is None:
             continue
         text_key = _extract_text_parts(msg.get("content"))
-        files_by_text.setdefault(text_key, []).append(files)
+        grouped_files_by_text.setdefault(text_key, []).append(files)
 
-    if not files_by_text:
+    if not grouped_files_by_text:
         return event_store_messages
 
     merged: list[dict[str, Any]] = []
@@ -722,11 +722,11 @@ def _enrich_event_store_messages_with_checkpoint_files(
         out = dict(msg)
         if out.get("type") == "human" and _extract_message_files(out) is None:
             text_key = _extract_text_parts(out.get("content"))
-            candidates = files_by_text.get(text_key)
+            candidates = grouped_files_by_text.get(text_key)
             if candidates:
                 files = candidates.pop(0)
                 if not candidates:
-                    files_by_text.pop(text_key, None)
+                    grouped_files_by_text.pop(text_key, None)
                 additional_kwargs = out.get("additional_kwargs")
                 out["additional_kwargs"] = (
                     dict(additional_kwargs) if isinstance(additional_kwargs, dict) else {}

@@ -488,3 +488,27 @@ def test_enrich_event_store_messages_with_checkpoint_files_keeps_existing_files(
     )
 
     assert merged[0]["additional_kwargs"]["files"] == [{"filename": "already.png"}]
+
+
+def test_enrich_event_store_messages_with_checkpoint_files_matches_unicode_text() -> None:
+    event_store_messages = [
+        {
+            "type": "human",
+            "content": [{"type": "text", "text": "这是图片📷"}],
+            "additional_kwargs": {},
+        },
+    ]
+    checkpoint_messages = [
+        {
+            "type": "human",
+            "content": [{"type": "text", "text": "这是图片📷"}],
+            "additional_kwargs": {"files": [{"filename": "unicode.png"}]},
+        },
+    ]
+
+    merged = threads._enrich_event_store_messages_with_checkpoint_files(
+        event_store_messages,
+        checkpoint_messages,
+    )
+
+    assert merged[0]["additional_kwargs"]["files"] == [{"filename": "unicode.png"}]
