@@ -447,11 +447,15 @@ async def get_thread_state(thread_id: str, request: Request) -> ThreadStateRespo
     tasks = [{"id": getattr(t, "id", ""), "name": getattr(t, "name", "")} for t in tasks_raw]
 
     values = serialize_channel_values(channel_values)
+    checkpoint_messages = values.get("messages")
 
     # Override messages with event store data (immune to summarization)
     es_messages = await _get_event_store_messages(request, thread_id)
     if es_messages is not None:
-        values["messages"] = es_messages
+        if isinstance(checkpoint_messages, list):
+            values["messages"] = _enrich_event_store_messages_with_checkpoint_files(es_messages, checkpoint_messages)
+        else:
+            values["messages"] = es_messages
 
     return ThreadStateResponse(
         values=values,
@@ -597,13 +601,23 @@ async def get_thread_history(thread_id: str, body: ThreadHistoryRequest, request
 
             # Attach messages only to the latest checkpoint entry.
             if is_latest_checkpoint:
+                checkpoint_messages = []
+                messages = channel_values.get("messages")
+                if messages:
+                    checkpoint_messages = serialize_channel_values({"messages": messages}).get("messages", [])
+
                 es_messages = await _get_event_store_messages(request, thread_id)
                 if es_messages is not None:
-                    values["messages"] = es_messages
+                    if checkpoint_messages:
+                        values["messages"] = _enrich_event_store_messages_with_checkpoint_files(
+                            es_messages,
+                            checkpoint_messages,
+                        )
+                    else:
+                        values["messages"] = es_messages
                 else:
-                    messages = channel_values.get("messages")
-                    if messages:
-                        values["messages"] = serialize_channel_values({"messages": messages}).get("messages", [])
+                    if checkpoint_messages:
+                        values["messages"] = checkpoint_messages
             is_latest_checkpoint = False
 
             # Derive next tasks
@@ -652,6 +666,74 @@ def _sanitize_legacy_command_repr(content_field: Any) -> Any:
         return content_field
     match = _LEGACY_CMD_INNER_CONTENT_RE.search(content_field)
     return match.group("inner") if match else content_field
+
+
+def _extract_text_parts(content: Any) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for item in content:
+        if isinstance(item, dict) and item.get("type") == "text":
+            text = item.get("text")
+            if isinstance(text, str) and text:
+                parts.append(text)
+    return "\n".join(parts).strip()
+
+
+def _extract_message_files(message: dict[str, Any]) -> list[dict[str, Any]] | None:
+    additional_kwargs = message.get("additional_kwargs")
+    if not isinstance(additional_kwargs, dict):
+        return None
+    files = additional_kwargs.get("files")
+    if not isinstance(files, list) or not files:
+        return None
+    normalized: list[dict[str, Any]] = []
+    for item in files:
+        if isinstance(item, dict):
+            normalized.append(dict(item))
+    return normalized or None
+
+
+def _enrich_event_store_messages_with_checkpoint_files(
+    event_store_messages: list[dict[str, Any]],
+    checkpoint_messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Backfill uploaded-file metadata from checkpoint messages into event-store messages."""
+    files_by_text: dict[str, list[list[dict[str, Any]]]] = {}
+    for msg in checkpoint_messages:
+        if not isinstance(msg, dict) or msg.get("type") != "human" or msg.get("name") == "summary":
+            continue
+        files = _extract_message_files(msg)
+        if files is None:
+            continue
+        text_key = _extract_text_parts(msg.get("content"))
+        files_by_text.setdefault(text_key, []).append(files)
+
+    if not files_by_text:
+        return event_store_messages
+
+    merged: list[dict[str, Any]] = []
+    for msg in event_store_messages:
+        if not isinstance(msg, dict):
+            merged.append(msg)
+            continue
+        out = dict(msg)
+        if out.get("type") == "human" and _extract_message_files(out) is None:
+            text_key = _extract_text_parts(out.get("content"))
+            candidates = files_by_text.get(text_key)
+            if candidates:
+                files = candidates.pop(0)
+                if not candidates:
+                    files_by_text.pop(text_key, None)
+                additional_kwargs = out.get("additional_kwargs")
+                out["additional_kwargs"] = (
+                    dict(additional_kwargs) if isinstance(additional_kwargs, dict) else {}
+                )
+                out["additional_kwargs"]["files"] = files
+        merged.append(out)
+    return merged
 
 
 async def _get_event_store_messages(request: Request, thread_id: str) -> list[dict] | None:

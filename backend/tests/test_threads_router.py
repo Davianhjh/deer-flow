@@ -431,3 +431,60 @@ def test_get_thread_history_returns_iso_for_legacy_checkpoint_metadata() -> None
     assert entries, "expected at least one history entry"
     for entry in entries:
         assert _ISO_TIMESTAMP_RE.match(entry["created_at"]), entry
+
+
+def test_enrich_event_store_messages_with_checkpoint_files_backfills_uploaded_files() -> None:
+    event_store_messages = [
+        {
+            "type": "human",
+            "content": [{"type": "text", "text": "请分析这张图"}],
+            "additional_kwargs": {},
+        },
+    ]
+    checkpoint_messages = [
+        {
+            "type": "human",
+            "content": [{"type": "text", "text": "请分析这张图"}],
+            "additional_kwargs": {
+                "files": [
+                    {
+                        "filename": "chart.png",
+                        "path": "/mnt/data/uploads/chart.png",
+                        "size": 1234,
+                        "status": "uploaded",
+                    }
+                ]
+            },
+        },
+    ]
+
+    merged = threads._enrich_event_store_messages_with_checkpoint_files(
+        event_store_messages,
+        checkpoint_messages,
+    )
+
+    assert merged[0]["additional_kwargs"]["files"] == checkpoint_messages[0]["additional_kwargs"]["files"]
+
+
+def test_enrich_event_store_messages_with_checkpoint_files_keeps_existing_files() -> None:
+    event_store_messages = [
+        {
+            "type": "human",
+            "content": [{"type": "text", "text": "看看这个"}],
+            "additional_kwargs": {"files": [{"filename": "already.png"}]},
+        },
+    ]
+    checkpoint_messages = [
+        {
+            "type": "human",
+            "content": [{"type": "text", "text": "看看这个"}],
+            "additional_kwargs": {"files": [{"filename": "from-checkpoint.png"}]},
+        },
+    ]
+
+    merged = threads._enrich_event_store_messages_with_checkpoint_files(
+        event_store_messages,
+        checkpoint_messages,
+    )
+
+    assert merged[0]["additional_kwargs"]["files"] == [{"filename": "already.png"}]
