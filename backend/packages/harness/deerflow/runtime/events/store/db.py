@@ -59,6 +59,11 @@ class DbRunEventStore(RunEventStore):
 
     @staticmethod
     def _format_file_size(size_value: Any) -> str:
+        """Convert raw file size input (bytes) into a display string.
+
+        Accepts numeric values or numeric strings and formats to ``KB``/``MB``.
+        Invalid or non-numeric inputs are normalized to ``"0.0 KB"``.
+        """
         if isinstance(size_value, str):
             try:
                 size_value = float(size_value)
@@ -71,6 +76,12 @@ class DbRunEventStore(RunEventStore):
 
     @classmethod
     def _extract_turn_files(cls, content: Any) -> list[dict[str, str]] | None:
+        """Extract ``additional_kwargs.files`` into normalized ``turn_files``.
+
+        Returns ``None`` when the message content doesn't contain a valid
+        files list. For valid entries, normalizes path, size, and status to the
+        ``event_metadata.turn_files`` wire format used by thread message APIs.
+        """
         if not isinstance(content, dict):
             return None
         additional_kwargs = content.get("additional_kwargs")
