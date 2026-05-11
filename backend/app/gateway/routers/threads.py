@@ -12,10 +12,10 @@ matching the LangGraph Platform wire format expected by the
 
 from __future__ import annotations
 
+from collections import deque
 import logging
 import re
 import uuid
-from collections import deque
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -704,7 +704,11 @@ def _enrich_event_store_messages_with_checkpoint_files(
     """Backfill uploaded-file metadata from checkpoint messages into event-store messages."""
     files_queue_by_text: dict[str, deque[list[dict[str, Any]]]] = {}
     for msg in checkpoint_messages:
-        if not isinstance(msg, dict) or msg.get("type") != "human" or msg.get("name") == "summary":
+        if not isinstance(msg, dict):
+            continue
+        if msg.get("type") != "human":
+            continue
+        if msg.get("name") == "summary":
             continue
         files = _extract_message_files(msg)
         if files is None:
@@ -721,7 +725,8 @@ def _enrich_event_store_messages_with_checkpoint_files(
             merged.append(msg)
             continue
         out = dict(msg)
-        if out.get("type") == "human" and _extract_message_files(out) is None:
+        existing_files = _extract_message_files(out)
+        if out.get("type") == "human" and existing_files is None:
             text_key = _extract_text_parts(out.get("content"))
             candidates = files_queue_by_text.get(text_key)
             if candidates:
