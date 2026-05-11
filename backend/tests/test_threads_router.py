@@ -1,5 +1,5 @@
 import re
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from _router_auth_helpers import make_authed_test_app
@@ -431,3 +431,49 @@ def test_get_thread_history_returns_iso_for_legacy_checkpoint_metadata() -> None
     assert entries, "expected at least one history entry"
     for entry in entries:
         assert _ISO_TIMESTAMP_RE.match(entry["created_at"]), entry
+
+
+def test_get_event_store_messages_attaches_turn_files_to_additional_kwargs() -> None:
+    import asyncio
+
+    fake_store = MagicMock()
+    fake_store.count_messages = AsyncMock(return_value=1)
+    fake_store.list_messages = AsyncMock(
+        side_effect=[
+            [
+                {
+                    "seq": 1,
+                    "content": {"type": "human", "id": None, "content": "check image", "additional_kwargs": {"foo": "bar"}},
+                    "metadata": {
+                        "turn_files": [
+                            {
+                                "filename": "xxx.png",
+                                "path": "/mnt/user-data/uploads/xxx.png",
+                                "size": "260.0 KB",
+                                "status": "uploaded",
+                            }
+                        ]
+                    },
+                }
+            ],
+            [],
+        ]
+    )
+
+    async def _scenario() -> list[dict] | None:
+        with patch("app.gateway.routers.threads.get_run_event_store", return_value=fake_store):
+            return await threads._get_event_store_messages(MagicMock(), "t1")
+
+    result = asyncio.run(_scenario())
+    assert result is not None
+    assert result[0]["additional_kwargs"] == {
+        "foo": "bar",
+        "files": [
+            {
+                "filename": "xxx.png",
+                "path": "/mnt/user-data/uploads/xxx.png",
+                "size": "260.0 KB",
+                "status": "uploaded",
+            }
+        ],
+    }

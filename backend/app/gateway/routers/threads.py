@@ -13,8 +13,8 @@ matching the LangGraph Platform wire format expected by the
 from __future__ import annotations
 
 import logging
-import uuid
 import re
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -22,8 +22,7 @@ from langgraph.checkpoint.base import empty_checkpoint
 from pydantic import BaseModel, Field, field_validator
 
 from app.gateway.authz import require_permission
-from app.gateway.deps import get_checkpointer
-from app.gateway.deps import get_run_event_store
+from app.gateway.deps import get_checkpointer, get_run_event_store
 from app.gateway.utils import sanitize_log_param
 from deerflow.config.paths import Paths, get_paths
 from deerflow.runtime import serialize_channel_values
@@ -631,6 +630,7 @@ async def get_thread_history(thread_id: str, body: ThreadHistoryRequest, request
         raise HTTPException(status_code=500, detail="Failed to get thread history")
 
     return entries
+
 
 _LEGACY_CMD_INNER_CONTENT_RE = re.compile(
     r"ToolMessage\(content=(?P<q>['\"])(?P<inner>.*?)(?P=q)",

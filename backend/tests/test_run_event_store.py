@@ -444,6 +444,47 @@ class TestDbRunEventStore:
 
         await close_engine()
 
+    @pytest.mark.anyio
+    async def test_human_message_files_are_persisted_as_turn_files(self, tmp_path):
+        from deerflow.persistence.engine import close_engine, get_session_factory, init_engine
+        from deerflow.runtime.events.store.db import DbRunEventStore
+
+        url = f"sqlite+aiosqlite:///{tmp_path / 'test.db'}"
+        await init_engine("sqlite", url=url, sqlite_dir=str(tmp_path))
+        s = DbRunEventStore(get_session_factory())
+
+        record = await s.put(
+            thread_id="t1",
+            run_id="r1",
+            event_type="human_message",
+            category="message",
+            content={
+                "type": "human",
+                "content": "please analyze this image",
+                "additional_kwargs": {
+                    "files": [
+                        {
+                            "filename": "xxx.png",
+                            "path": "/mnt/user-data/uploads/xxx.png",
+                            "size": 266240,
+                            "status": "uploaded",
+                        }
+                    ]
+                },
+            },
+        )
+
+        assert record["metadata"]["turn_files"] == [
+            {
+                "filename": "xxx.png",
+                "path": "/mnt/user-data/uploads/xxx.png",
+                "size": "260.0 KB",
+                "status": "uploaded",
+            }
+        ]
+
+        await close_engine()
+
 
 # -- Factory tests --
 
