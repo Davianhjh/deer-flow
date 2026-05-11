@@ -19,6 +19,7 @@ from deerflow.runtime.events.store.base import RunEventStore
 from deerflow.runtime.user_context import AUTO, _AutoSentinel, get_current_user, resolve_user_id
 
 logger = logging.getLogger(__name__)
+_UPLOADS_BASE_PATH = "/mnt/user-data/uploads"
 
 
 class DbRunEventStore(RunEventStore):
@@ -62,7 +63,7 @@ class DbRunEventStore(RunEventStore):
             try:
                 size_value = float(size_value)
             except ValueError:
-                return size_value
+                return "0.0 KB"
         if not isinstance(size_value, (int, float)):
             return "0.0 KB"
         size_kb = float(size_value) / 1024.0
@@ -87,7 +88,7 @@ class DbRunEventStore(RunEventStore):
                 continue
             path = file_item.get("path")
             if not isinstance(path, str) or not path:
-                path = f"/mnt/user-data/uploads/{filename}"
+                path = f"{_UPLOADS_BASE_PATH}/{filename}"
             turn_files.append(
                 {
                     "filename": filename,

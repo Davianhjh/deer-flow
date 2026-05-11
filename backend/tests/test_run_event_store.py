@@ -468,7 +468,16 @@ class TestDbRunEventStore:
                             "path": "/mnt/user-data/uploads/xxx.png",
                             "size": 266240,
                             "status": "uploaded",
-                        }
+                        },
+                        {
+                            "filename": "as-string.png",
+                            "size": "2048",
+                            "status": "uploaded",
+                        },
+                        {
+                            "filename": "bad-size.png",
+                            "size": "not-a-number",
+                        },
                     ]
                 },
             },
@@ -480,7 +489,19 @@ class TestDbRunEventStore:
                 "path": "/mnt/user-data/uploads/xxx.png",
                 "size": "260.0 KB",
                 "status": "uploaded",
-            }
+            },
+            {
+                "filename": "as-string.png",
+                "path": "/mnt/user-data/uploads/as-string.png",
+                "size": "2.0 KB",
+                "status": "uploaded",
+            },
+            {
+                "filename": "bad-size.png",
+                "path": "/mnt/user-data/uploads/bad-size.png",
+                "size": "0.0 KB",
+                "status": "uploaded",
+            },
         ]
 
         await close_engine()
