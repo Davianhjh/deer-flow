@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -22,6 +23,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_checkpointer
+from app.gateway.deps import get_run_event_store
 from app.gateway.utils import sanitize_log_param
 from deerflow.config.paths import Paths, get_paths
 from deerflow.runtime import serialize_channel_values
@@ -446,6 +448,11 @@ async def get_thread_state(thread_id: str, request: Request) -> ThreadStateRespo
 
     values = serialize_channel_values(channel_values)
 
+    # Override messages with event store data (immune to summarization)
+    es_messages = await _get_event_store_messages(request, thread_id)
+    if es_messages is not None:
+        values["messages"] = es_messages
+
     return ThreadStateResponse(
         values=values,
         next=next_tasks,
@@ -590,9 +597,13 @@ async def get_thread_history(thread_id: str, body: ThreadHistoryRequest, request
 
             # Attach messages only to the latest checkpoint entry.
             if is_latest_checkpoint:
-                messages = channel_values.get("messages")
-                if messages:
-                    values["messages"] = serialize_channel_values({"messages": messages}).get("messages", [])
+                es_messages = await _get_event_store_messages(request, thread_id)
+                if es_messages is not None:
+                    values["messages"] = es_messages
+                else:
+                    messages = channel_values.get("messages")
+                    if messages:
+                        values["messages"] = serialize_channel_values({"messages": messages}).get("messages", [])
             is_latest_checkpoint = False
 
             # Derive next tasks
@@ -620,3 +631,97 @@ async def get_thread_history(thread_id: str, body: ThreadHistoryRequest, request
         raise HTTPException(status_code=500, detail="Failed to get thread history")
 
     return entries
+
+_LEGACY_CMD_INNER_CONTENT_RE = re.compile(
+    r"ToolMessage\(content=(?P<q>['\"])(?P<inner>.*?)(?P=q)",
+    re.DOTALL,
+)
+
+
+def _sanitize_legacy_command_repr(content_field: Any) -> Any:
+    """Recover the inner ToolMessage text from a legacy ``str(Command(...))`` repr.
+
+    Runs that pre-date the ``on_tool_end`` fix in ``journal.py`` stored
+    ``str(Command(update={'messages':[ToolMessage(content='X', ...)]}))`` as the
+    tool_result content. New runs store ``'X'`` directly. For old threads, try
+    to extract ``'X'`` defensively; return the original string if extraction
+    fails (still no worse than the current checkpoint-based fallback, which is
+    broken for summarized threads anyway).
+    """
+    if not isinstance(content_field, str) or not content_field.startswith("Command(update="):
+        return content_field
+    match = _LEGACY_CMD_INNER_CONTENT_RE.search(content_field)
+    return match.group("inner") if match else content_field
+
+
+async def _get_event_store_messages(request: Request, thread_id: str) -> list[dict] | None:
+    """Load messages from the event store, returning None if unavailable.
+
+    The event store is append-only and immune to summarization. Each
+    message event's ``content`` field contains a ``model_dump()``'d
+    LangChain Message dict that is already JSON-serialisable.
+
+    **Full pagination, not a fixed limit.** ``RunEventStore.list_messages``
+    returns the newest ``limit`` records when no cursor is given, which
+    silently drops older messages. We call ``count_messages()`` first and
+    request that many records. For stores that may return fewer (e.g. filtered
+    by user), we also fall back to ``after_seq``-cursor pagination.
+
+    **Copy-on-read.** Each content dict is copied before ``id`` is patched so
+    the live store object is never mutated; ``MemoryRunEventStore`` returns
+    live references.
+
+    **Legacy Command repr sanitization.** See ``_sanitize_legacy_command_repr``.
+
+    **User context.** ``DbRunEventStore`` is user-scoped by default via
+    ``resolve_user_id(AUTO)`` (see ``runtime/user_context.py``). Callers of
+    this helper must be inside a request where ``@require_permission`` has
+    populated the user contextvar. Both ``get_thread_history`` and
+    ``get_thread_state`` satisfy that. Do not call this helper from CLI or
+    migration scripts without passing ``user_id=None`` explicitly.
+
+    Returns ``None`` when the event store is not configured or contains no
+    messages for this thread, so callers can fall back to checkpoint messages.
+    """
+    try:
+        event_store = get_run_event_store(request)
+    except Exception:
+        return None
+
+    try:
+        total = await event_store.count_messages(thread_id)
+    except Exception:
+        logger.exception("count_messages failed for thread %s", sanitize_log_param(thread_id))
+        return None
+    if not total:
+        return None
+
+    # Batch by page_size to keep memory bounded for very long threads.
+    page_size = 500
+    collected: list[dict] = []
+    after_seq: int | None = None
+    while True:
+        page = await event_store.list_messages(thread_id, limit=page_size, after_seq=after_seq)
+        if not page:
+            break
+        collected.extend(page)
+        if len(page) < page_size:
+            break
+        after_seq = page[-1].get("seq")
+        if after_seq is None:
+            break
+
+    messages: list[dict] = []
+    for evt in collected:
+        raw = evt.get("content")
+        if not isinstance(raw, dict) or "type" not in raw:
+            continue
+        # Copy to avoid mutating the store-owned dict.
+        content = dict(raw)
+        if content.get("id") is None:
+            content["id"] = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{thread_id}:{evt['seq']}"))
+        # Sanitize legacy Command reprs on tool_result messages only.
+        if content.get("type") == "tool":
+            content["content"] = _sanitize_legacy_command_repr(content.get("content"))
+        messages.append(content)
+    return messages if messages else None
