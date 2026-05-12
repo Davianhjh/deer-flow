@@ -63,3 +63,42 @@ test("aggregates token usage messages once per assistant turn", () => {
     ),
   ).toEqual([null, null, ["ai-1", "ai-2"], null, ["ai-3"]]);
 });
+
+test("starts a processing group for tool messages without a preceding ai tool-call message", () => {
+  const messages = [
+    {
+      id: "human-1",
+      type: "human",
+      content: "Read this image",
+    },
+    {
+      id: "tool-orphan-1",
+      type: "tool",
+      name: null,
+      tool_call_id: "tool-missing-request",
+      content: "Successfully read image",
+    },
+    {
+      id: "ai-1",
+      type: "ai",
+      content: "Image parsed.",
+    },
+  ] as Message[];
+
+  const groups = getMessageGroups(messages);
+  const usageMessagesByGroupIndex = getAssistantTurnUsageMessages(groups);
+
+  expect(groups.map((group) => group.type)).toEqual([
+    "human",
+    "assistant:processing",
+    "assistant",
+  ]);
+  expect(groups[1]?.messages.map((message) => message.id)).toEqual([
+    "tool-orphan-1",
+  ]);
+  expect(
+    usageMessagesByGroupIndex.map(
+      (groupMessages) => groupMessages?.map((message) => message.id) ?? null,
+    ),
+  ).toEqual([null, null, ["ai-1"]]);
+});
