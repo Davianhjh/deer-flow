@@ -20,6 +20,7 @@ import { ThreadTitle } from "@/components/workspace/thread-title";
 import { TodoList } from "@/components/workspace/todo-list";
 import { TokenUsageIndicator } from "@/components/workspace/token-usage-indicator";
 import { Welcome } from "@/components/workspace/welcome";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useI18n } from "@/core/i18n/hooks";
 import { useModels } from "@/core/models/hooks";
 import { useNotification } from "@/core/notification/hooks";
@@ -135,6 +136,7 @@ export default function ChatPage() {
             )}
           >
             <div className="flex w-full items-center text-sm font-medium">
+              <SidebarTrigger className="mr-2 shrink-0 md:hidden" />
               <ThreadTitle threadId={threadId} thread={thread} />
             </div>
             <div className="flex items-center gap-2">
