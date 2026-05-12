@@ -74,7 +74,6 @@ test("starts a processing group for tool messages without a preceding ai tool-ca
     {
       id: "tool-orphan-1",
       type: "tool",
-      name: null,
       tool_call_id: "tool-missing-request",
       content: "Successfully read image",
     },
