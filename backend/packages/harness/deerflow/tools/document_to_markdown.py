@@ -57,6 +57,7 @@ def _enrich_file_entry_with_markdown(
     markdown_virtual_path = f"{_OUTPUTS_VIRTUAL_PREFIX}/{output_filename}"
     enriched["markdown_file"] = output_filename
     enriched["markdown_virtual_path"] = markdown_virtual_path
+    # Keep both keys for compatibility with existing uploads payload shape.
     enriched["markdown_path"] = markdown_virtual_path
     enriched["markdown_artifact_url"] = _build_artifact_url(thread_id, markdown_virtual_path)
     # Explicit mapping for UI/history consumers.
@@ -129,4 +130,3 @@ async def process_uploaded_documents_to_markdown(
                 updated_files.append(dict(file_entry))
 
         additional_kwargs["files"] = updated_files
-

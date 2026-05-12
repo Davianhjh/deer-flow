@@ -307,10 +307,12 @@ async def start_run(
     # Only agent-relevant keys are forwarded; unknown keys (e.g. thread_id) are ignored.
     merge_run_context_overrides(config, getattr(body, "context", None))
     inject_authenticated_user_context(config, request)
+    runtime_context = config.get("context")
+    context_user_id = runtime_context.get("user_id") if isinstance(runtime_context, dict) else None
     await process_uploaded_documents_to_markdown(
         thread_id=thread_id,
         messages=graph_input.get("messages", []),
-        user_id=(config.get("context") or {}).get("user_id") if isinstance(config.get("context"), dict) else None,
+        user_id=context_user_id,
     )
 
     stream_modes = normalize_stream_modes(body.stream_mode)
