@@ -723,5 +723,18 @@ async def _get_event_store_messages(request: Request, thread_id: str) -> list[di
         # Sanitize legacy Command reprs on tool_result messages only.
         if content.get("type") == "tool":
             content["content"] = _sanitize_legacy_command_repr(content.get("content"))
+        metadata = evt.get("metadata")
+        if isinstance(metadata, dict):
+            turn_files = metadata.get("turn_files")
+            if isinstance(turn_files, list) and turn_files:
+                files = [dict(item) for item in turn_files if isinstance(item, dict)]
+                if files:
+                    additional_kwargs = content.get("additional_kwargs")
+                    if isinstance(additional_kwargs, dict):
+                        additional_kwargs = dict(additional_kwargs)
+                    else:
+                        additional_kwargs = {}
+                    additional_kwargs["files"] = files
+                    content["additional_kwargs"] = additional_kwargs
         messages.append(content)
     return messages if messages else None
