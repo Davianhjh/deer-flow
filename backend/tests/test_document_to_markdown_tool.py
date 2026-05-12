@@ -7,6 +7,20 @@ from langchain_core.messages import HumanMessage
 from deerflow.tools.document_to_markdown import process_uploaded_documents_to_markdown
 
 
+class _TestPaths:
+    def __init__(self, uploads_dir: Path, outputs_dir: Path):
+        self._uploads_dir = uploads_dir
+        self._outputs_dir = outputs_dir
+
+    def sandbox_uploads_dir(self, _thread_id: str, user_id=None) -> Path:
+        _ = user_id
+        return self._uploads_dir
+
+    def sandbox_outputs_dir(self, _thread_id: str, user_id=None) -> Path:
+        _ = user_id
+        return self._outputs_dir
+
+
 @pytest.mark.anyio
 async def test_process_uploaded_documents_to_markdown_enriches_supported_file(tmp_path):
     thread_id = "thread1"
@@ -22,14 +36,7 @@ async def test_process_uploaded_documents_to_markdown_enriches_supported_file(tm
         patch("deerflow.tools.document_to_markdown.get_paths") as get_paths_mock,
         patch("deerflow.tools.document_to_markdown.parse_document_to_markdown_text", return_value="# converted"),
     ):
-        get_paths_mock.return_value = type(
-            "P",
-            (),
-            {
-                "sandbox_uploads_dir": lambda _self, _thread_id, user_id=None: uploads_dir,
-                "sandbox_outputs_dir": lambda _self, _thread_id, user_id=None: uploads_dir.parent / "outputs",
-            },
-        )()
+        get_paths_mock.return_value = _TestPaths(uploads_dir=uploads_dir, outputs_dir=uploads_dir.parent / "outputs")
 
         await process_uploaded_documents_to_markdown(thread_id=thread_id, messages=messages)
 
@@ -58,14 +65,7 @@ async def test_process_uploaded_documents_to_markdown_supports_required_extensio
         patch("deerflow.tools.document_to_markdown.get_paths") as get_paths_mock,
         patch("deerflow.tools.document_to_markdown.parse_document_to_markdown_text", return_value=""),
     ):
-        get_paths_mock.return_value = type(
-            "P",
-            (),
-            {
-                "sandbox_uploads_dir": lambda _self, _thread_id, user_id=None: uploads_dir,
-                "sandbox_outputs_dir": lambda _self, _thread_id, user_id=None: outputs_dir,
-            },
-        )()
+        get_paths_mock.return_value = _TestPaths(uploads_dir=uploads_dir, outputs_dir=outputs_dir)
         await process_uploaded_documents_to_markdown(thread_id=thread_id, messages=messages)
 
     entry = messages[0].additional_kwargs["files"][0]
@@ -88,16 +88,8 @@ async def test_process_uploaded_documents_to_markdown_skips_unsupported_or_missi
         patch("deerflow.tools.document_to_markdown.get_effective_user_id", return_value=user_id),
         patch("deerflow.tools.document_to_markdown.get_paths") as get_paths_mock,
     ):
-        get_paths_mock.return_value = type(
-            "P",
-            (),
-            {
-                "sandbox_uploads_dir": lambda _self, _thread_id, user_id=None: uploads_dir,
-                "sandbox_outputs_dir": lambda _self, _thread_id, user_id=None: uploads_dir.parent / "outputs",
-            },
-        )()
+        get_paths_mock.return_value = _TestPaths(uploads_dir=uploads_dir, outputs_dir=uploads_dir.parent / "outputs")
         await process_uploaded_documents_to_markdown(thread_id=thread_id, messages=messages)
 
     updated = messages[0].additional_kwargs["files"]
     assert updated == files
-

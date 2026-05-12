@@ -35,7 +35,7 @@ def _get_file_filename(file_entry: dict[str, Any]) -> str | None:
     return None
 
 
-def _build_output_filename(source_filename: str) -> str:
+def _build_markdown_filename(source_filename: str) -> str:
     # Keep the original extension in the output name to avoid collisions across
     # files sharing the same stem (e.g. report.docx and report.pdf).
     return f"{source_filename}.md"
@@ -57,7 +57,8 @@ def _enrich_file_entry_with_markdown(
     markdown_virtual_path = f"{_OUTPUTS_VIRTUAL_PREFIX}/{output_filename}"
     enriched["markdown_file"] = output_filename
     enriched["markdown_virtual_path"] = markdown_virtual_path
-    # Keep both keys for compatibility with existing uploads payload shape.
+    # Keep both keys for compatibility with the uploads payload shape that
+    # existing frontend code already consumes.
     enriched["markdown_path"] = markdown_virtual_path
     enriched["markdown_artifact_url"] = _build_artifact_url(thread_id, markdown_virtual_path)
     # Explicit mapping for UI/history consumers.
@@ -112,7 +113,7 @@ async def process_uploaded_documents_to_markdown(
                 updated_files.append(dict(file_entry))
                 continue
 
-            output_filename = _build_output_filename(source_filename)
+            output_filename = _build_markdown_filename(source_filename)
             output_path = outputs_dir / output_filename
             try:
                 markdown_text = await asyncio.to_thread(parse_document_to_markdown_text, source_path)
