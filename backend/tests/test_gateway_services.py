@@ -74,6 +74,24 @@ def test_normalize_input_with_messages():
     assert result["messages"][0].content == "hi"
 
 
+def test_normalize_input_preserves_human_additional_kwargs_files():
+    from app.gateway.services import normalize_input
+
+    files = [{"filename": "截图1.png", "path": "/mnt/user-data/uploads/截图1.png"}]
+    result = normalize_input(
+        {
+            "messages": [
+                {
+                    "type": "human",
+                    "content": [{"type": "text", "text": "帮我提取图片中的文字内容"}],
+                    "additional_kwargs": {"files": files},
+                }
+            ]
+        }
+    )
+    assert result["messages"][0].additional_kwargs["files"] == files
+
+
 def test_normalize_input_passthrough():
     from app.gateway.services import normalize_input
 
