@@ -31,6 +31,7 @@ from deerflow.runtime import (
     UnsupportedStrategyError,
     run_agent,
 )
+from deerflow.tools.document_to_markdown import process_uploaded_documents_to_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -306,6 +307,11 @@ async def start_run(
     # Only agent-relevant keys are forwarded; unknown keys (e.g. thread_id) are ignored.
     merge_run_context_overrides(config, getattr(body, "context", None))
     inject_authenticated_user_context(config, request)
+    await process_uploaded_documents_to_markdown(
+        thread_id=thread_id,
+        messages=graph_input.get("messages", []),
+        user_id=(config.get("context") or {}).get("user_id") if isinstance(config.get("context"), dict) else None,
+    )
 
     stream_modes = normalize_stream_modes(body.stream_mode)
 
