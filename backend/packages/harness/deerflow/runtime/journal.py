@@ -157,12 +157,12 @@ class RunJournal(BaseCallbackHandler):
                 for m in reversed(batch):
                     if isinstance(m, HumanMessage) and m.name != "summary":
                         caller = self._identify_caller(tags)
-                        turn_files = (
-                            files
-                            if isinstance(getattr(m, "additional_kwargs", None), dict)
-                            and isinstance(files := m.additional_kwargs.get("files", []), list)
-                            else []
-                        )
+                        turn_files: list[Any] = []
+                        additional_kwargs = getattr(m, "additional_kwargs", None)
+                        if isinstance(additional_kwargs, dict):
+                            files = additional_kwargs.get("files", [])
+                            if isinstance(files, list):
+                                turn_files = files
                         self.set_first_human_message(m.text)
                         self._put(
                             event_type="llm.human.input",
