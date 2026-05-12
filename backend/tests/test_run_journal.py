@@ -678,3 +678,35 @@ class TestChatModelStartHumanMessage:
         j.on_chat_model_start({}, [], run_id=uuid4(), tags=["lead_agent"])
         await j.flush()
         assert j._first_human_msg is None
+
+    @pytest.mark.anyio
+    async def test_human_input_metadata_includes_turn_files(self, journal_setup):
+        from langchain_core.messages import HumanMessage
+
+        j, store = journal_setup
+        files = [{"filename": "截图1.png", "path": "/mnt/user-data/uploads/截图1.png"}]
+        j.on_chat_model_start(
+            {},
+            [[HumanMessage(content="帮我提取图片中的文字内容", additional_kwargs={"files": files})]],
+            run_id=uuid4(),
+            tags=["lead_agent"],
+        )
+        await j.flush()
+
+        events = await store.list_events("t1", "r1")
+        human_events = [e for e in events if e["event_type"] == "llm.human.input"]
+        assert len(human_events) == 1
+        assert human_events[0]["metadata"]["turn_files"] == files
+
+    @pytest.mark.anyio
+    async def test_human_input_metadata_turn_files_defaults_to_empty_list(self, journal_setup):
+        from langchain_core.messages import HumanMessage
+
+        j, store = journal_setup
+        j.on_chat_model_start({}, [[HumanMessage(content="普通问题")]], run_id=uuid4(), tags=["lead_agent"])
+        await j.flush()
+
+        events = await store.list_events("t1", "r1")
+        human_events = [e for e in events if e["event_type"] == "llm.human.input"]
+        assert len(human_events) == 1
+        assert human_events[0]["metadata"]["turn_files"] == []
