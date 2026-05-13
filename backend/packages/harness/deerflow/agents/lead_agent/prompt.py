@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import threading
 from functools import lru_cache
@@ -516,20 +517,6 @@ combined with a FastAPI gateway for REST API access [citation:FastAPI](https://f
 - [AI Trends 2026](https://techcrunch.com/ai-trends) - Industry analysis
 ```
 
-**CRITICAL: Sources section format:**
-- Every item in the Sources section MUST be a clickable markdown link with URL
-- Use standard markdown link `[Title](URL) - Description` format (NOT `[citation:...]` format)
-- The `[citation:Title](URL)` format is ONLY for inline citations within the report body
-- ❌ WRONG: `GitHub 仓库 - 官方源代码和文档` (no URL!)
-- ❌ WRONG in Sources: `[citation:GitHub Repository](url)` (citation prefix is for inline only!)
-- ✅ RIGHT in Sources: `[GitHub Repository](https://github.com/bytedance/deer-flow) - 官方源代码和文档`
-
-**WORKFLOW for Research Tasks:**
-1. Use web_search to find sources → Extract {{title, url, snippet}} from results
-2. Write content with inline citations: `claim [citation:Title](url)`
-3. Collect all citations in a "Sources" section at the end
-4. NEVER write claims without citations when sources are available
-
 **CRITICAL RULES:**
 - ❌ DO NOT write research content without citations
 - ❌ DO NOT forget to extract URLs from search results
@@ -765,6 +752,42 @@ def _build_custom_mounts_section(*, app_config: AppConfig | None = None) -> str:
     return f"\n**Custom Mounted Directories:**\n{mounts_list}\n- If the user needs files outside `/mnt/user-data`, use these absolute container paths directly when they match the requested directory"
 
 
+def _normalize_prompt_file_images(thread_state: dict | None) -> list[str]:
+    if not thread_state:
+        return []
+    prompt_file = thread_state.get("prompt_file") if isinstance(thread_state, dict) else None
+    images = []
+    if isinstance(prompt_file, dict):
+        images = prompt_file.get("images") or []
+    elif hasattr(prompt_file, "images"):
+        images = getattr(prompt_file, "images") or []
+    return [image for image in images if isinstance(image, str) and image.startswith("data:") and ";base64," in image]
+
+
+def _collect_thread_images(thread_state: dict | None) -> list[str]:
+    if not thread_state:
+        return []
+    collected: list[str] = []
+    viewed_images = thread_state.get("viewed_images") if isinstance(thread_state, dict) else None
+    if isinstance(viewed_images, dict):
+        for image_data in viewed_images.values():
+            if not isinstance(image_data, dict):
+                continue
+            base64_data = image_data.get("base64")
+            mime_type = image_data.get("mime_type") or "application/octet-stream"
+            if isinstance(base64_data, str) and base64_data:
+                collected.append(f"data:{mime_type};base64,{base64_data}")
+    return collected
+
+
+def _build_prompt_file_section(*, thread_state: dict | None = None) -> str:
+    images = _normalize_prompt_file_images(thread_state) or _collect_thread_images(thread_state)
+    if not images:
+        return ""
+    image_list = "\n".join(f"- {image}" for image in images)
+    return f"<prompt_file>\n<images>\n{image_list}\n</images>\n</prompt_file>"
+
+
 def apply_prompt_template(
     subagent_enabled: bool = False,
     max_concurrent_subagents: int = 3,
@@ -772,10 +795,12 @@ def apply_prompt_template(
     agent_name: str | None = None,
     available_skills: set[str] | None = None,
     app_config: AppConfig | None = None,
+    thread_state: dict | None = None,
 ) -> str:
     # Include subagent section only if enabled (from runtime parameter)
     n = max_concurrent_subagents
     subagent_section = _build_subagent_section(n, app_config=app_config) if subagent_enabled else ""
+    prompt_file_section = _build_prompt_file_section(thread_state=thread_state)
 
     # Add subagent reminder to critical_reminders if enabled
     subagent_reminder = (
@@ -820,4 +845,4 @@ def apply_prompt_template(
         subagent_reminder=subagent_reminder,
         subagent_thinking=subagent_thinking,
         acp_section=acp_and_mounts_section,
-    )
+    ) + (f"\n{prompt_file_section}" if prompt_file_section else "")

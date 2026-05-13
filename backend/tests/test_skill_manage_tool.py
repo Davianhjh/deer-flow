@@ -3,8 +3,10 @@ from types import SimpleNamespace
 
 import anyio
 import pytest
+from langchain_core.messages import HumanMessage
 
 skill_manage_module = importlib.import_module("deerflow.tools.skill_manage_tool")
+lead_prompt = importlib.import_module("deerflow.agents.lead_agent.prompt")
 
 
 def _skill_content(name: str, description: str = "Demo skill") -> str:
@@ -176,3 +178,77 @@ def test_skill_manage_rejects_support_path_traversal(monkeypatch, tmp_path):
             "malicious overwrite",
             "references/../SKILL.md",
         )
+
+
+def test_skill_manage_allows_images_support_directory(monkeypatch, tmp_path):
+    skills_root = tmp_path / "skills"
+    config = SimpleNamespace(
+        skills=SimpleNamespace(get_skills_path=lambda: skills_root, container_path="/mnt/skills", use="deerflow.skills.storage.local_skill_storage:LocalSkillStorage"),
+        skill_evolution=SimpleNamespace(enabled=True, moderation_model_name=None),
+    )
+    monkeypatch.setattr("deerflow.config.get_app_config", lambda: config)
+    monkeypatch.setattr("deerflow.skills.security_scanner.get_app_config", lambda: config)
+
+    async def _refresh():
+        return None
+
+    monkeypatch.setattr(skill_manage_module, "refresh_skills_system_prompt_cache_async", _refresh)
+    monkeypatch.setattr(skill_manage_module, "scan_skill_content", lambda *args, **kwargs: _async_result("allow", "ok"))
+
+    runtime = SimpleNamespace(context={"thread_id": "thread-1"}, config={"configurable": {"thread_id": "thread-1"}})
+    anyio.run(skill_manage_module.skill_manage_tool.coroutine, runtime, "create", "demo-skill", _skill_content("demo-skill"))
+
+    result = anyio.run(
+        skill_manage_module.skill_manage_tool.coroutine,
+        runtime,
+        "write_file",
+        "demo-skill",
+        "image-bytes",
+        "images/reference.png",
+    )
+
+    assert "Wrote 'images/reference.png'" in result
+    assert (skills_root / "custom" / "demo-skill" / "images" / "reference.png").read_text(encoding="utf-8") == "image-bytes"
+
+
+def test_uploads_middleware_populates_prompt_file_images(monkeypatch, tmp_path):
+    uploads_dir = tmp_path / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    image_path = uploads_dir / "sample.png"
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\nimage-bytes")
+
+    from deerflow.agents.middlewares.uploads_middleware import UploadsMiddleware
+
+    middleware = UploadsMiddleware(base_dir=str(tmp_path))
+    state = {
+        "messages": [
+            HumanMessage(
+                content="hello",
+                id="msg-1",
+                name="user",
+                additional_kwargs={"files": [{"filename": "sample.png", "size": image_path.stat().st_size, "status": "uploaded"}]},
+            )
+        ]
+    }
+    runtime = SimpleNamespace(context={"thread_id": "thread-1"})
+    monkeypatch.setattr("deerflow.agents.middlewares.uploads_middleware.get_effective_user_id", lambda: "user-1")
+    monkeypatch.setattr("deerflow.agents.middlewares.uploads_middleware.Paths.sandbox_uploads_dir", lambda self, thread_id, user_id=None: uploads_dir)
+
+    result = middleware.before_agent(state, runtime)
+
+    assert result is not None
+    assert result["uploaded_files"][0]["filename"] == "sample.png"
+    assert result["prompt_file"]["images"][0].startswith("data:image/png;base64,")
+
+
+def test_apply_prompt_template_includes_thread_images_as_prompt_file_images():
+    prompt = lead_prompt.apply_prompt_template(
+        agent_name="default",
+        available_skills=None,
+        thread_state={
+            "prompt_file": {"images": ["data:image/png;base64,abc"]},
+        },
+    )
+
+    assert "<prompt_file>" in prompt
+    assert "data:image/png;base64,abc" in prompt

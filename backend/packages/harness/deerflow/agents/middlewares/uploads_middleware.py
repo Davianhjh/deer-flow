@@ -1,6 +1,8 @@
 """Middleware to inject uploaded files information into agent context."""
 
+import base64
 import logging
+import mimetypes
 from pathlib import Path
 from typing import NotRequired, override
 
@@ -61,6 +63,7 @@ class UploadsMiddlewareState(AgentState):
     """State schema for uploads middleware."""
 
     uploaded_files: NotRequired[list[dict] | None]
+    prompt_file: NotRequired[dict | None]
 
 
 class UploadsMiddleware(AgentMiddleware[UploadsMiddlewareState]):
@@ -184,6 +187,28 @@ class UploadsMiddleware(AgentMiddleware[UploadsMiddlewareState]):
             )
         return files if files else None
 
+    def _image_prompt_file_entries(self, files: list[dict], uploads_dir: Path | None) -> list[str]:
+        images: list[str] = []
+        if uploads_dir is None:
+            return images
+        for file in files:
+            filename = file.get("filename")
+            if not filename:
+                continue
+            file_path = uploads_dir / filename
+            if not file_path.is_file():
+                continue
+            mime_type, _ = mimetypes.guess_type(file_path)
+            if not mime_type or not mime_type.startswith("image/"):
+                continue
+            try:
+                raw = file_path.read_bytes()
+            except Exception:
+                logger.debug("Failed to read uploaded image %s", file_path, exc_info=True)
+                continue
+            images.append(f"data:{mime_type};base64,{base64.b64encode(raw).decode('ascii')}")
+        return images
+
     @override
     def before_agent(self, state: UploadsMiddlewareState, runtime: Runtime) -> dict | None:
         """Inject uploaded files information before agent execution.
@@ -261,6 +286,12 @@ class UploadsMiddleware(AgentMiddleware[UploadsMiddlewareState]):
 
         # Create files message and prepend to the last human message content
         files_message = self._create_files_message(new_files, historical_files)
+        prompt_file_images = self._image_prompt_file_entries(new_files, uploads_dir)
+        existing_prompt_file = state.get("prompt_file") if isinstance(state.get("prompt_file"), dict) else {}
+        merged_prompt_file = dict(existing_prompt_file) if isinstance(existing_prompt_file, dict) else {}
+        if prompt_file_images:
+            merged_images = list(dict.fromkeys((merged_prompt_file.get("images") or []) + prompt_file_images))
+            merged_prompt_file["images"] = merged_images
 
         # Extract original content - handle both string and list formats
         original_content = last_message.content
@@ -291,5 +322,6 @@ class UploadsMiddleware(AgentMiddleware[UploadsMiddlewareState]):
 
         return {
             "uploaded_files": new_files,
+            **({"prompt_file": merged_prompt_file} if merged_prompt_file else {}),
             "messages": messages,
         }
