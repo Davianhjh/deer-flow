@@ -19,6 +19,12 @@ from deerflow.agents.middlewares.tool_call_metadata import clone_ai_message_with
 
 logger = logging.getLogger(__name__)
 
+# Maximum characters to keep from a single ToolMessage when preparing
+# messages for the summarization LLM.  Large tool outputs (web search
+# results, file reads) are noise for summarization — a truncated version
+# preserves the gist while drastically reducing token cost.
+_TOOL_RESULT_MAX_CHARS = 1000
+
 
 @dataclass(frozen=True)
 class SummarizationEvent:
@@ -181,6 +187,91 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         And this message will be ignored to display in the frontend, but still can be used as context for the model.
         """
         return [HumanMessage(content=f"Here is a summary of the conversation to date:\n\n{summary}", name="summary")]
+
+    # ------------------------------------------------------------------
+    # Message sanitization for the summarization LLM call
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _sanitize_for_summarization(messages: list[AnyMessage]) -> list[AnyMessage]:
+        """Strip non-essential details from messages before they are sent to the summarization LLM.
+
+        What gets simplified:
+
+        - **AIMessage tool_calls**: Only the tool *name* is kept; arguments are dropped.
+          The summarization model only needs to know *which* tool was called, not
+          the full argument payload.
+
+        - **ToolMessage content**: Truncated to ``_TOOL_RESULT_MAX_CHARS``.
+          Large tool outputs (web page dumps, file reads) are noise for summary
+          generation — a truncated version preserves "what happened" without
+          bloating the prompt.
+
+        - **Multimodal HumanMessage images**: ``image_url`` content blocks are
+          removed, keeping only text blocks.  Base64-encoded image payloads
+          injected by ``ViewImageMiddleware`` are huge (tens of KB per image) and
+          carry no summarizable semantic value.
+
+        HumanMessages and AIMessages without tool_calls are passed through as-is.
+        """
+        sanitized: list[AnyMessage] = []
+        for msg in messages:
+            if isinstance(msg, AIMessage) and msg.tool_calls:
+                # Keep only tool names, drop all arguments
+                simplified_calls: list[dict[str, Any]] = []
+                for tc in msg.tool_calls:
+                    simplified_calls.append({"name": tc.get("name", ""), "id": tc.get("id", ""), "type": tc.get("type", "tool_call")})
+                sanitized.append(
+                    AIMessage(
+                        content=msg.content,
+                        tool_calls=simplified_calls,
+                        id=msg.id,
+                        name=msg.name,
+                    )
+                )
+                continue
+
+            if isinstance(msg, ToolMessage):
+                raw = msg.content if isinstance(msg.content, str) else str(msg.content)
+                truncated = raw[:_TOOL_RESULT_MAX_CHARS] if len(raw) > _TOOL_RESULT_MAX_CHARS else raw
+                sanitized.append(
+                    ToolMessage(
+                        content=truncated,
+                        tool_call_id=msg.tool_call_id,
+                        id=msg.id,
+                        name=msg.name,
+                    )
+                )
+                continue
+
+            if isinstance(msg, HumanMessage):
+                content = msg.content
+                if isinstance(content, list):
+                    # Multimodal content — keep only text blocks,
+                    # drop image_url blocks (base64 payloads have no summarization value)
+                    text_only = [block for block in content if isinstance(block, dict) and block.get("type") == "text"]
+                    if text_only:
+                        sanitized.append(HumanMessage(content=text_only, id=msg.id, name=msg.name))
+                    # If no text blocks remain, drop the message entirely
+                    continue
+                # Plain text HumanMessage — pass through
+                sanitized.append(msg)
+                continue
+
+            # SystemMessage, RemoveMessage, etc. — pass through
+            sanitized.append(msg)
+
+        return sanitized
+
+    def _create_summary(self, messages_to_summarize: list[AnyMessage]) -> str:
+        """Generate summary, sanitizing messages before sending to the LLM."""
+        sanitized = self._sanitize_for_summarization(messages_to_summarize)
+        return super()._create_summary(sanitized)
+
+    async def _acreate_summary(self, messages_to_summarize: list[AnyMessage]) -> str:
+        """Generate summary (async), sanitizing messages before sending to the LLM."""
+        sanitized = self._sanitize_for_summarization(messages_to_summarize)
+        return await super()._acreate_summary(sanitized)
 
     def _preserve_dynamic_context_reminders(
         self,
