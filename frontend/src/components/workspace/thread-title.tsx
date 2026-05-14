@@ -10,6 +10,7 @@ import { FlipDisplay } from "./flip-display";
 export function ThreadTitle({
   threadId,
   thread,
+  className,
 }: {
   className?: string;
   threadId: string;
@@ -43,7 +44,7 @@ export function ThreadTitle({
     return null;
   }
   return (
-    <FlipDisplay uniqueKey={threadId}>
+    <FlipDisplay uniqueKey={threadId} className={className}>
       {thread.values.title ?? "Untitled"}
     </FlipDisplay>
   );

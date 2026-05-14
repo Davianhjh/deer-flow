@@ -40,6 +40,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ollama = ["langchain-ollama>=0.3.0"]
+oss = ["oss2>=2.19.0"]
 postgres = [
     "asyncpg>=0.29",
     "langgraph-checkpoint-postgres>=3.0.5",

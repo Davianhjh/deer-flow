@@ -24,10 +24,19 @@ dependencies = [
     "langgraph-checkpoint-postgres>=3.0.5",
     "psycopg[binary]>=3.3.3",
     "psycopg-pool>=3.3.0",
+    "mammoth>=1.11.0",
+    "pypandoc>=1.17",
+    "pandas>=3.0.2",
+    "openpyxl>=3.1.5",
+    "pdf2image>=1.17.0",
+    "glmocr>=0.1.5",
+    "xlrd>=2.0.2",
+    "asyncpg>=0.31.0",
 ]
 
 [project.optional-dependencies]
 postgres = ["deerflow-harness[postgres]"]
+oss = ["deerflow-harness[oss]"]
 
 [dependency-groups]
 dev = [

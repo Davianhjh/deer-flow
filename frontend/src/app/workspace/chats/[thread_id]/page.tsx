@@ -135,9 +135,14 @@ export default function ChatPage() {
                 : "bg-background/80 shadow-xs backdrop-blur",
             )}
           >
-            <div className="flex w-full items-center text-sm font-medium">
+            <div className="flex w-full min-w-0 items-center text-sm font-medium">
               <SidebarTrigger className="mr-2 shrink-0 md:hidden" />
-              <ThreadTitle threadId={threadId} thread={thread} />
+              <div className="min-w-0 truncate">
+                <ThreadTitle
+                  threadId={threadId}
+                  thread={thread}
+                />
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <TokenUsageIndicator

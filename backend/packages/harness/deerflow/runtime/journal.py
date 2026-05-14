@@ -164,9 +164,10 @@ class RunJournal(BaseCallbackHandler):
                             if isinstance(files, list):
                                 turn_files = files
                         self.set_first_human_message(m.text)
+                        category = "summarize" if "summarize" in caller else "message"
                         self._put(
                             event_type="llm.human.input",
-                            category="message",
+                            category=category,
                             content=m.model_dump(),
                             metadata={"caller": caller, "turn_files": turn_files},
                         )

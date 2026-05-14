@@ -526,8 +526,8 @@ combined with a FastAPI gateway for REST API access [citation:FastAPI](https://f
 
 <critical_reminders>
 - **Clarification First**: ALWAYS clarify unclear/missing/ambiguous requirements BEFORE starting work - never assume or guess
-{subagent_reminder}- Skill First: Always load the relevant skill before starting **complex** tasks.
-- Progressive Loading: Load resources incrementally as referenced in skills
+- Tools First: Check if any of your available tools can handle the task directly. Only load a skill if no tool is a clear match and the task is complex.
+{subagent_reminder}- Progressive Loading: Load resources incrementally as referenced in skills
 - Output Files: Final deliverables must be in `/mnt/user-data/outputs`
 - Clarity: Be direct and helpful, avoid unnecessary meta-commentary
 - Including Images and Mermaid: Images and Mermaid diagrams are always welcomed in the Markdown format, and you're encouraged to use `![Image Description](image_path)\n\n` or "```mermaid" to display images in response or Markdown files
@@ -596,12 +596,13 @@ def _get_cached_skills_prompt_section(
     return f"""<skill_system>
 You have access to skills that provide optimized workflows for specific tasks. Each skill contains best practices, frameworks, and references to additional resources.
 
-**Progressive Loading Pattern:**
-1. When a user query matches a skill's use case, immediately call `read_file` on the skill's main file using the path attribute provided in the skill tag below
-2. Read and understand the skill's workflow and instructions
-3. The skill file contains references to external resources under the same folder
-4. Load referenced resources only when needed during execution
-5. Follow the skill's instructions precisely
+**Skill Loading Pattern (use skills as a fallback):**
+1. **Check tools first** — if any of your available tools can handle the task directly (e.g. document_to_markdown for document conversion), call that tool immediately without loading a skill.
+2. When no tool matches and the user query matches a skill's use case, call `read_file` on the skill's main file using the path attribute provided in the skill tag below
+3. Read and understand the skill's workflow and instructions
+4. The skill file contains references to external resources under the same folder
+5. Load referenced resources only when needed during execution
+6. Follow the skill's instructions precisely
 
 **Skills are located at:** {container_base_path}
 {skill_evolution_section}

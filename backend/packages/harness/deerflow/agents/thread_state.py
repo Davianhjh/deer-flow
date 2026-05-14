@@ -46,6 +46,18 @@ def merge_viewed_images(existing: dict[str, ViewedImageData] | None, new: dict[s
     return {**existing, **new}
 
 
+def merge_converted_docs(existing: list[dict] | None, new: list[dict] | None) -> list[dict]:
+    """Reducer for converted_docs — deduplicates by file_path, keeping the latest."""
+    if existing is None:
+        return new or []
+    if new is None:
+        return existing
+    merged = {d["file_path"]: d for d in existing}
+    for d in new:
+        merged[d["file_path"]] = d
+    return list(merged.values())
+
+
 class ThreadState(AgentState):
     sandbox: NotRequired[SandboxState | None]
     thread_data: NotRequired[ThreadDataState | None]
@@ -54,3 +66,4 @@ class ThreadState(AgentState):
     todos: NotRequired[list | None]
     uploaded_files: NotRequired[list[dict] | None]
     viewed_images: Annotated[dict[str, ViewedImageData], merge_viewed_images]  # image_path -> {base64, mime_type}
+    converted_docs: Annotated[list[dict], merge_converted_docs]  # [{file_path, markdown_content, markdown_file}, ...]
