@@ -217,10 +217,17 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         sanitized: list[AnyMessage] = []
         for msg in messages:
             if isinstance(msg, AIMessage) and msg.tool_calls:
-                # Keep only tool names, drop all arguments
+                # Keep only tool names, drop argument values (but preserve the
+                # ``args`` key with an empty dict — ``langchain_core``'s
+                # ``tool_call()`` factory requires it as a keyword-only arg).
                 simplified_calls: list[dict[str, Any]] = []
                 for tc in msg.tool_calls:
-                    simplified_calls.append({"name": tc.get("name", ""), "id": tc.get("id", ""), "type": tc.get("type", "tool_call")})
+                    simplified_calls.append({
+                        "name": tc.get("name", ""),
+                        "args": {},
+                        "id": tc.get("id", ""),
+                        "type": tc.get("type", "tool_call"),
+                    })
                 sanitized.append(
                     AIMessage(
                         content=msg.content,
