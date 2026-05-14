@@ -45,6 +45,34 @@ type SendMessageOptions = {
   additionalKwargs?: Record<string, unknown>;
 };
 
+function messageSignature(message: Message): string {
+  const identity = messageIdentity(message) ?? "";
+  const role = message.type ?? "";
+  const name =
+    "name" in message && typeof message.name === "string" ? message.name : "";
+  const content =
+    typeof message.content === "string"
+      ? message.content
+      : JSON.stringify(message.content ?? "");
+  const files =
+    message.additional_kwargs?.files && Array.isArray(message.additional_kwargs.files)
+      ? JSON.stringify(message.additional_kwargs.files)
+      : "";
+  return [role, name, identity, content, files].join("|");
+}
+
+function dedupeMessages(messages: Message[]): Message[] {
+  const seen = new Set<string>();
+  const result: Message[] = [];
+  for (const message of messages) {
+    const signature = messageSignature(message);
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    result.push(message);
+  }
+  return result;
+}
+
 function mergeMessages(
   historyMessages: Message[],
   threadMessages: Message[],
@@ -75,11 +103,11 @@ function mergeMessages(
     }
   }
 
-  return [
+  return dedupeMessages([
     ...historyMessages.slice(0, cutoff),
     ...threadMessages,
     ...optimisticMessages,
-  ];
+  ]);
 }
 
 function messageIdentity(message: Message): string | undefined {
