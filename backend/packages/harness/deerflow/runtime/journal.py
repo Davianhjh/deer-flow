@@ -217,9 +217,10 @@ class RunJournal(BaseCallbackHandler):
                 self._seen_llm_starts.add(rid)
 
             # Trace event: llm_response (OpenAI completion format)
+            category = "summarize" if "summarize" in caller else "message"
             self._put(
                 event_type="llm.ai.response",
-                category="message",
+                category=category,
                 content=message.model_dump(),
                 metadata={
                     "caller": caller,
