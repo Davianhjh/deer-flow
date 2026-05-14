@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 
 from deerflow.sandbox.local.local_sandbox import LocalSandbox, PathMapping
@@ -14,8 +15,9 @@ class LocalSandboxProvider(SandboxProvider):
     uses_thread_data_mounts = True
 
     def __init__(self):
-        """Initialize the local sandbox provider with path mappings."""
+        """Initialize the local sandbox provider with path mappings and environment variables."""
         self._path_mappings = self._setup_path_mappings()
+        self._environment = self._setup_environment()
 
     def _setup_path_mappings(self) -> list[PathMapping]:
         """
@@ -99,10 +101,43 @@ class LocalSandboxProvider(SandboxProvider):
 
         return mappings
 
+    def _setup_environment(self) -> dict[str, str]:
+        """
+        Load and resolve sandbox environment variables from config.yaml.
+
+        Reads ``sandbox.environment`` and resolves ``$VAR`` references to the
+        corresponding host environment variable values.  Follows the same
+        resolution logic as ``AioSandboxProvider``.
+
+        Returns:
+            Resolved environment variable dictionary.
+        """
+        try:
+            from deerflow.config import get_app_config
+
+            config = get_app_config()
+            sandbox_config = config.sandbox
+            if not sandbox_config or not sandbox_config.environment:
+                return {}
+
+            env_config = sandbox_config.environment
+            resolved: dict[str, str] = {}
+            for key, value in env_config.items():
+                if isinstance(value, str) and value.startswith("$"):
+                    env_name = value[1:]
+                    resolved[key] = os.environ.get(env_name, "")
+                else:
+                    resolved[key] = str(value)
+            logger.debug("Resolved sandbox environment: %d variable(s)", len(resolved))
+            return resolved
+        except Exception:
+            logger.warning("Could not load sandbox environment variables", exc_info=True)
+            return {}
+
     def acquire(self, thread_id: str | None = None) -> str:
         global _singleton
         if _singleton is None:
-            _singleton = LocalSandbox("local", path_mappings=self._path_mappings)
+            _singleton = LocalSandbox("local", path_mappings=self._path_mappings, env=self._environment)
         return _singleton.id
 
     def get(self, sandbox_id: str) -> Sandbox | None:

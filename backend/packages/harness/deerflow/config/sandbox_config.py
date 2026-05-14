@@ -17,6 +17,11 @@ class SandboxConfig(BaseModel):
         allow_host_bash: Enable host-side bash execution for LocalSandboxProvider.
             Dangerous and intended only for fully trusted local workflows.
 
+    AioSandboxProvider / LocalSandboxProvider shared option:
+        environment: Environment variables to inject into sandbox subprocesses
+            (LocalSandboxProvider) or containers (AioSandboxProvider).
+            Values starting with $ are resolved from host env.
+
     AioSandboxProvider specific options:
         image: Docker image to use (default: enterprise-public-cn-beijing.cr.volces.com/vefaas-public/all-in-one-sandbox:latest)
         port: Base port for sandbox containers (default: 8080)
@@ -61,7 +66,8 @@ class SandboxConfig(BaseModel):
     )
     environment: dict[str, str] = Field(
         default_factory=dict,
-        description="Environment variables to inject into the sandbox container. Values starting with $ will be resolved from host environment variables.",
+        description="Environment variables to inject into sandbox subprocesses (LocalSandboxProvider) "
+        "or containers (AioSandboxProvider). Values starting with $ will be resolved from host environment variables.",
     )
 
     bash_output_max_chars: int = Field(

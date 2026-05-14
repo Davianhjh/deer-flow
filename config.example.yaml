@@ -562,6 +562,13 @@ sandbox:
   # not a secure isolation boundary for shell access. Enable only for fully
   # trusted, single-user local workflows.
   allow_host_bash: false
+  # Optional: Environment variables to inject into every sandbox subprocess.
+  # Values starting with $ are resolved from the Gateway process environment.
+  # This is essential when the Gateway runs as a daemon (systemd, supervisor,
+  # docker) where .bashrc is not sourced, or when skills/tools need specific
+  # env vars that must be explicitly declared.
+  # environment:
+  #   VOLCENGINE_API_KEY: $VOLCENGINE_API_KEY
   # Optional: Mount additional host directories into the sandbox.
   # Each mount maps a host path to a virtual container path accessible by the agent.
   # mounts:

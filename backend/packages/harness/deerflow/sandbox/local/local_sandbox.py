@@ -64,17 +64,21 @@ class LocalSandbox(Sandbox):
 
         return None
 
-    def __init__(self, id: str, path_mappings: list[PathMapping] | None = None):
+    def __init__(self, id: str, path_mappings: list[PathMapping] | None = None, env: dict[str, str] | None = None):
         """
-        Initialize local sandbox with optional path mappings.
+        Initialize local sandbox with optional path mappings and environment variables.
 
         Args:
             id: Sandbox identifier
             path_mappings: List of path mappings with optional read-only flag.
                           Skills directory is read-only by default.
+            env: Optional extra environment variables to inject into every
+                 subprocess spawned by this sandbox. These are merged on top
+                 of the process environment, so they can shadow existing vars.
         """
         super().__init__(id)
         self.path_mappings = path_mappings or []
+        self._env = env or {}
         # Track files written through write_file so read_file only
         # reverse-resolves paths in agent-authored content.
         self._agent_written_paths: set[str] = set()
@@ -304,13 +308,40 @@ class LocalSandbox(Sandbox):
 
         raise RuntimeError("No suitable shell executable found. Tried /bin/zsh, /bin/bash, /bin/sh, and `sh` on PATH.")
 
+    def _build_subprocess_env(self, base_overrides: dict[str, str] | None = None) -> dict[str, str] | None:
+        """Merge sandbox-configured env vars into the subprocess environment.
+
+        Always starts from the current ``os.environ`` so that mandatory
+        platform variables (PATH, HOME, etc.) are preserved.  Platform-specific
+        overrides (``base_overrides``) and sandbox-configured env vars
+        (``self._env``) are then merged on top in that order.
+
+        When both ``base_overrides`` and ``self._env`` are empty, returns
+        ``None`` so that the subprocess inherits ``os.environ`` directly
+        (avoiding a potentially large copy on every command).
+
+        Args:
+            base_overrides: Platform-specific env overrides (e.g. MSYS flags
+                             on Windows).  ``None`` means no overrides.
+
+        Returns:
+            The resolved environment dict, or ``None`` to inherit.
+        """
+        if not self._env and not base_overrides:
+            return None  # Fast path: inherit os.environ directly
+        merged = dict(os.environ)
+        if base_overrides:
+            merged.update(base_overrides)
+        merged.update(self._env)
+        return merged
+
     def execute_command(self, command: str) -> str:
         # Resolve container paths in command before execution
         resolved_command = self._resolve_paths_in_command(command)
         shell = self._get_shell()
 
         if os.name == "nt":
-            env = None
+            env = self._build_subprocess_env()
             if self._is_powershell(shell):
                 args = [shell, "-NoProfile", "-Command", resolved_command]
             elif self._is_cmd_shell(shell):
@@ -318,11 +349,10 @@ class LocalSandbox(Sandbox):
             else:
                 args = [shell, "-c", resolved_command]
                 if self._is_msys_shell(shell):
-                    env = {
-                        **os.environ,
+                    env = self._build_subprocess_env({
                         "MSYS_NO_PATHCONV": "1",
                         "MSYS2_ARG_CONV_EXCL": "*",
-                    }
+                    })
 
             result = subprocess.run(
                 args,
@@ -334,12 +364,14 @@ class LocalSandbox(Sandbox):
             )
         else:
             args = [shell, "-c", resolved_command]
+            env = self._build_subprocess_env()
             result = subprocess.run(
                 args,
                 shell=False,
                 capture_output=True,
                 text=True,
                 timeout=600,
+                env=env,
             )
         output = result.stdout
         if result.stderr:
