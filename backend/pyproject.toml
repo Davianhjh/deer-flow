@@ -32,6 +32,7 @@ dependencies = [
     "glmocr>=0.1.5",
     "xlrd>=2.0.2",
     "asyncpg>=0.31.0",
+    "alibabacloud-oss-v2>=1.3.0",
 ]
 
 [project.optional-dependencies]
