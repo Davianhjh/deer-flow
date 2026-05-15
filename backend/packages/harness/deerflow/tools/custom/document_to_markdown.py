@@ -521,25 +521,36 @@ def document_to_markdown_tool(
         file_paths: list[str],
         tool_call_id: Annotated[str, InjectedToolCallId],
 ) -> Command:
-    """Convert document files (Word, Excel, PDF) to Markdown format.
+    """Convert Word / Excel / PDF files to Markdown.
 
-    Conversions run on the **host machine** using external programs
-    (LibreOffice, pandoc, poppler) rather than inside the sandbox.
+    **IMPORTANT — Call this tool FIRST.  Do NOT write scripts or load skills.**
+
+    Conversions run on the **host machine** (LibreOffice, pandoc, poppler).
 
     When to use this tool:
 
-    - The user explicitly asks to convert a document to Markdown.
-    - The user asks to upload a document to a knowledge base, learn from a
-      document, or reference a document for future use — all of these imply
-      the document must first be converted to readable Markdown.
-    - The user uploads a Word / Excel / PDF file with any instruction
-      (analyse, convert, summarise, explain) — you need the Markdown first.
+    - The user uploads any .doc / .docx / .rtf / .xls / .xlsx / .csv / .pdf
+      file and asks to convert, analyse, summarise, explain, or learn from it.
+    - The user wants to feed a document into a knowledge base or pipeline —
+      you need the Markdown first.
 
     When NOT to use this tool:
 
-    - The document is already in Markdown or plain-text format.
-    - You only need to read a small portion of the file (use ``read_file``).
-    - The file is an image (use ``view_image_tool`` for images).
+    - The file is already Markdown / plain-text.
+    - You only need to read a small portion (use ``read_file``).
+    - The file is an image (use ``view_image_tool``).
+
+    **After the tool returns — follow the exact branch for the user's intent:**
+
+    BRANCH A — Simple conversion (user only wants the Markdown file):
+      1. Call ``present_files`` with the ``markdown_file`` path(s).
+      2. Briefly describe what was converted.
+
+    BRANCH B — Pipeline mode (conversion is a step toward knowledge base,
+               learning, analysis, code generation, or any downstream task):
+      1. Do NOT call ``present_files`` and do NOT display the Markdown.
+      2. Immediately continue with the next step, using ``markdown_file``
+         or ``markdown_content`` from the tool result.
 
     Args:
         file_paths: List of ``/mnt/user-data/...`` virtual paths pointing to

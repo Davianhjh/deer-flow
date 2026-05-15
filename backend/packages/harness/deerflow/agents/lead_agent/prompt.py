@@ -527,6 +527,7 @@ combined with a FastAPI gateway for REST API access [citation:FastAPI](https://f
 <critical_reminders>
 - **Clarification First**: ALWAYS clarify unclear/missing/ambiguous requirements BEFORE starting work - never assume or guess
 - Tools First: Check if any of your available tools can handle the task directly. Only load a skill if no tool is a clear match and the task is complex.
+- **Document Conversion** (`document_to_markdown`): After conversion, branch on user intent: (A) simple conversion → ``present_files`` + display result; (B) downstream pipeline (knowledge base, learning, code gen) → pass ``markdown_file``/``markdown_content`` to next step, do NOT display.
 {subagent_reminder}- Progressive Loading: Load resources incrementally as referenced in skills
 - Output Files: Final deliverables must be in `/mnt/user-data/outputs`
 - Clarity: Be direct and helpful, avoid unnecessary meta-commentary
