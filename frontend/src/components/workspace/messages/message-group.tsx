@@ -655,12 +655,46 @@ function ToolCall({
       </ChainOfThoughtStep>
     );
   } else if (name === "ask_clarification") {
+    const question = (args as { question?: string })?.question;
+    const context = (args as { context?: string })?.context;
+    const options = (args as { options?: string[] })?.options;
+    const clarificationType = (
+      args as { clarification_type?: string }
+    )?.clarification_type;
+
+    const label = question
+      ? resolveLabel(
+          question.length > 120 ? question.slice(0, 120) + "…" : question,
+        )
+      : resolveLabel(t.toolCalls.needYourHelp);
+
+    const resolvedContext = context
+      ? context
+      : typeof result === "string"
+        ? result
+        : null;
+
     return (
       <ChainOfThoughtStep
         key={id}
-        label={resolveLabel(t.toolCalls.needYourHelp)}
+        label={label}
         icon={MessageCircleQuestionMarkIcon}
-      ></ChainOfThoughtStep>
+      >
+        {resolvedContext && (
+          <div className="text-muted-foreground my-1.5 max-h-24 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed">
+            {resolvedContext}
+          </div>
+        )}
+        {Array.isArray(options) && options.length > 0 && (
+          <ChainOfThoughtSearchResults>
+            {options.map((option, idx) => (
+              <ChainOfThoughtSearchResult key={idx}>
+                {option}
+              </ChainOfThoughtSearchResult>
+            ))}
+          </ChainOfThoughtSearchResults>
+        )}
+      </ChainOfThoughtStep>
     );
   } else if (name === "write_todos") {
     return (
