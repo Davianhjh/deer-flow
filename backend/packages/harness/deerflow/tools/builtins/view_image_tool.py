@@ -52,16 +52,19 @@ def view_image_tool(
     image_path: str,
     tool_call_id: Annotated[str, InjectedToolCallId],
 ) -> Command:
-    """Read an image file.
+    """Read an image file and make it visible to the model.
 
     Use this tool to read an image file and make it available for display.
 
     When to use the view_image tool:
-    - When you need to view an image file.
+    - When you need to view or analyse an image file's contents.
 
     When NOT to use the view_image tool:
     - For non-image files (use present_files instead)
     - For multiple files at once (use present_files instead)
+    - **In image generation workflows** (e.g. volcano-image-generation, image-generation):
+      those skills accept raw file paths and handle conversion internally.
+      Just pass the upload paths directly — do NOT call view_image first.
 
     Args:
         image_path: Absolute /mnt/user-data virtual path to the image file. Common formats supported: jpg, jpeg, png, webp.

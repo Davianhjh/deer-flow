@@ -45,6 +45,24 @@ type SendMessageOptions = {
   additionalKwargs?: Record<string, unknown>;
 };
 
+function _humanText(msg: Message): string {
+  if (msg.type !== "human") return "";
+  const c = msg.content;
+  if (typeof c === "string") return c;
+  if (Array.isArray(c)) {
+    return c
+      .filter(
+        (block: unknown): block is { type: "text"; text: string } =>
+          typeof block === "object" &&
+          block !== null &&
+          (block as Record<string, unknown>).type === "text",
+      )
+      .map((b) => b.text)
+      .join("");
+  }
+  return "";
+}
+
 function mergeMessages(
   historyMessages: Message[],
   threadMessages: Message[],
@@ -75,10 +93,23 @@ function mergeMessages(
     }
   }
 
+  // Deduplicate optimistic human messages against threadMessages:
+  // when the server has already sent back the same user message (via
+  // values stream), drop the optimistic copy to avoid a double render.
+  const threadHumanTexts = new Set(
+    threadMessages.filter((m) => m.type === "human").map(_humanText).filter(Boolean),
+  );
+  const dedupedOptimistic =
+    threadHumanTexts.size > 0
+      ? optimisticMessages.filter(
+          (m) => m.type !== "human" || !threadHumanTexts.has(_humanText(m)),
+        )
+      : optimisticMessages;
+
   return [
     ...historyMessages.slice(0, cutoff),
     ...threadMessages,
-    ...optimisticMessages,
+    ...dedupedOptimistic,
   ];
 }
 
