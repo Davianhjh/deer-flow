@@ -13,7 +13,7 @@ This skill generates professional PowerPoint presentations by creating AI-genera
 
 - Plan and structure multi-slide presentations with unified visual style
 - Support multiple presentation styles: Business, Academic, Minimal, Apple Keynote, Creative
-- Generate unique AI images for each slide using image-generation skill
+- Generate unique AI images for each slide using volcano-image-generation skill
 - Maintain visual consistency by using previous slide as reference image
 - Compose images into a professional PPTX file
 
@@ -83,64 +83,72 @@ Create a JSON file in `/mnt/user-data/workspace/` with the presentation structur
 
 **IMPORTANT**: Generate slides **strictly one by one, in order**. Do NOT parallelize or batch image generation. Each slide depends on the previous slide's output as a reference image. Generating slides in parallel will break visual consistency and is not allowed.
 
-1. Read the image-generation skill: `/mnt/skills/public/image-generation/SKILL.md`
+1. Read the volcano-image-generation skill: `/mnt/skills/custom/volcano-image-generation/SKILL.md`
 
-2. **For the FIRST slide (slide 1)**, create a prompt that establishes the visual style:
+2. **For the FIRST slide (slide 1)**, create a prompt that establishes the visual style.
+   The volcano-image-generation skill uses a simplified JSON format.
+   Embed ALL visual details (style, color_palette, composition, typography, effects)
+   into a single, very detailed `prompt` field.
 
 ```json
 {
-  "prompt": "Professional presentation slide. [style_guidelines from plan]. Title: 'Your Title'. [visual_description]. This slide establishes the visual language for the entire presentation.",
-  "style": "[Based on chosen style - e.g., Apple Keynote aesthetic, dramatic lighting, cinematic]",
-  "composition": "Clean layout with clear text hierarchy, [style-specific composition]",
-  "color_palette": "[From style_guidelines]",
-  "typography": "[From style_guidelines]"
+  "prompt": "Professional presentation slide. [MUST include: style description, color palette with hex codes, typography details, composition/layout, lighting/effects — ALL from style_guidelines]. Title: 'Your Title'. [visual_description]. This slide establishes the visual language for the entire presentation.",
+  "images": [],
+  "size": "2K",
+  "output_format": "png",
+  "watermark": false
 }
 ```
 
 ```bash
-python /mnt/skills/public/image-generation/scripts/generate.py \
+python /mnt/skills/custom/volcano-image-generation/scripts/generate.py \
   --prompt-file /mnt/user-data/workspace/slide-01-prompt.json \
-  --output-file /mnt/user-data/outputs/slide-01.jpg \
-  --aspect-ratio 16:9
+  --output-file /mnt/user-data/outputs/slide-01.png \
+  --size 2K
 ```
 
-3. **For subsequent slides (slide 2+)**, use the PREVIOUS slide as a reference image:
+3. **For subsequent slides (slide 2+)**, put the PREVIOUS slide's output path into `images`:
 
 ```json
 {
-  "prompt": "Professional presentation slide continuing the visual style from the reference image. Maintain the same color palette, typography style, and overall aesthetic. Title: 'Slide Title'. [visual_description]. Keep visual consistency with the reference.",
-  "style": "Match the style of the reference image exactly",
-  "composition": "Similar layout principles as reference, adapted for this content",
-  "color_palette": "Same as reference image",
-  "consistency_note": "This slide must look like it belongs in the same presentation as the reference image"
+  "prompt": "Professional presentation slide continuing EXACTLY the visual style from the reference image. Maintain the SAME color palette, typography style, and overall aesthetic. Title: 'Slide Title'. [visual_description]. CRITICAL: This slide must look like it belongs in the exact same presentation as the reference image.",
+  "images": [
+    "/mnt/user-data/outputs/slide-01.png"
+  ],
+  "size": "2K",
+  "output_format": "png",
+  "watermark": false
 }
 ```
 
 ```bash
-python /mnt/skills/public/image-generation/scripts/generate.py \
+python /mnt/skills/custom/volcano-image-generation/scripts/generate.py \
   --prompt-file /mnt/user-data/workspace/slide-02-prompt.json \
-  --reference-images /mnt/user-data/outputs/slide-01.jpg \
-  --output-file /mnt/user-data/outputs/slide-02.jpg \
-  --aspect-ratio 16:9
+  --output-file /mnt/user-data/outputs/slide-02.png \
+  --size 2K
 ```
 
-4. **Continue for all remaining slides**, always referencing the previous slide:
+4. **Continue for all remaining slides**, always putting the previous slide in `images`:
 
 ```bash
-# Slide 3 references slide 2
-python /mnt/skills/public/image-generation/scripts/generate.py \
+# Slide 3 references slide 2 (via images field in prompt JSON)
+python /mnt/skills/custom/volcano-image-generation/scripts/generate.py \
   --prompt-file /mnt/user-data/workspace/slide-03-prompt.json \
-  --reference-images /mnt/user-data/outputs/slide-02.jpg \
-  --output-file /mnt/user-data/outputs/slide-03.jpg \
-  --aspect-ratio 16:9
+  --output-file /mnt/user-data/outputs/slide-03.png \
+  --size 2K
 
-# Slide 4 references slide 3
-python /mnt/skills/public/image-generation/scripts/generate.py \
+# Slide 4 references slide 3 (via images field in prompt JSON)
+python /mnt/skills/custom/volcano-image-generation/scripts/generate.py \
   --prompt-file /mnt/user-data/workspace/slide-04-prompt.json \
-  --reference-images /mnt/user-data/outputs/slide-03.jpg \
-  --output-file /mnt/user-data/outputs/slide-04.jpg \
-  --aspect-ratio 16:9
+  --output-file /mnt/user-data/outputs/slide-04.png \
+  --size 2K
 ```
+
+**Key differences from image-generation skill:**
+- Prompt JSON uses a single detailed `prompt` field (embed style/colors/composition/layout/typography/effects ALL in the prompt string)
+- Reference images go in the `images` array inside the prompt JSON file (not `--reference-images` CLI flag)
+- Output format is `png` (not `jpg`)
+- Use `--size 2K` instead of `--aspect-ratio 16:9`
 
 ### Step 4: Compose PPT
 
@@ -149,7 +157,7 @@ After all slide images are generated, call the composition script:
 ```bash
 python /mnt/skills/public/ppt-generation/scripts/generate.py \
   --plan-file /mnt/user-data/workspace/presentation-plan.json \
-  --slide-images /mnt/user-data/outputs/slide-01.jpg /mnt/user-data/outputs/slide-02.jpg /mnt/user-data/outputs/slide-03.jpg \
+  --slide-images /mnt/user-data/outputs/slide-01.png /mnt/user-data/outputs/slide-02.png /mnt/user-data/outputs/slide-03.png \
   --output-file /mnt/user-data/outputs/presentation.pptx
 ```
 
@@ -222,9 +230,9 @@ Create `/mnt/user-data/workspace/ai-product-plan.json`:
 }
 ```
 
-### Step 2: Read image-generation skill
+### Step 2: Read volcano-image-generation skill
 
-Read `/mnt/skills/public/image-generation/SKILL.md` to understand how to generate images.
+Read `/mnt/skills/custom/volcano-image-generation/SKILL.md` to understand how to generate images.
 
 ### Step 3: Generate slide images sequentially with reference chaining
 
@@ -234,19 +242,18 @@ Create `/mnt/user-data/workspace/nova-slide-01.json`:
 ```json
 {
   "prompt": "Ultra-premium presentation title slide with glassmorphism design. Background: smooth flowing gradient from deep purple (#667eea) through magenta (#f093fb) to cyan (#00d4ff), soft and vibrant. Center: large frosted glass panel with strong backdrop blur effect, rounded corners 32px, containing bold white sans-serif title 'Introducing Nova AI' (72pt, SF Pro Display style, font-weight 700) with subtle text shadow, subtitle 'Intelligence, Reimagined' below in lighter weight. The glass panel has subtle white border (1px rgba 255,255,255,0.25) and soft purple-tinted drop shadow. Floating around the card: 3D glass spheres with refraction, translucent geometric shapes (icosahedrons, abstract blobs), creating depth and dimension. Soft luminous glow emanating from behind the glass panel. Small floating particles of light. Apple Vision Pro / visionOS UI aesthetic. Professional presentation slide, 16:9 aspect ratio. Hyper-modern, premium tech product launch feel.",
-  "style": "Glassmorphism, visionOS aesthetic, Apple Vision Pro UI style, premium tech, 2024 design trends",
-  "composition": "Centered glass card as focal point, floating 3D elements creating depth at edges, 40% negative space, clear visual hierarchy",
-  "lighting": "Soft ambient glow from gradient, light refraction through glass elements, subtle rim lighting on 3D shapes",
-  "color_palette": "Purple gradient #667eea, magenta #f093fb, cyan #00d4ff, frosted white rgba(255,255,255,0.15), pure white text #ffffff",
-  "effects": "Backdrop blur on glass panels, soft drop shadows with color tint, light refraction, subtle noise texture on glass, floating particles"
+  "images": [],
+  "size": "2K",
+  "output_format": "png",
+  "watermark": false
 }
 ```
 
 ```bash
-python /mnt/skills/public/image-generation/scripts/generate.py \
+python /mnt/skills/custom/volcano-image-generation/scripts/generate.py \
   --prompt-file /mnt/user-data/workspace/nova-slide-01.json \
-  --output-file /mnt/user-data/outputs/nova-slide-01.jpg \
-  --aspect-ratio 16:9
+  --output-file /mnt/user-data/outputs/nova-slide-01.png \
+  --size 2K
 ```
 
 **Slide 2 - Content (MUST reference slide 1 for consistency):**
@@ -255,35 +262,36 @@ Create `/mnt/user-data/workspace/nova-slide-02.json`:
 ```json
 {
   "prompt": "Presentation slide continuing EXACT visual style from reference image. SAME purple-to-cyan gradient background, SAME glassmorphism aesthetic, SAME typography style. Left side: frosted glass card with backdrop blur containing title 'Why Nova?' in bold white (matching reference font style), three feature points as subtle glass pill badges below. Right side: abstract 3D neural network visualization made of interconnected glass nodes with soft cyan glow, floating in space. Floating translucent geometric shapes (matching style from reference) adding depth. The frosted glass has identical treatment: white border, purple-tinted shadow, same blur intensity. CRITICAL: This slide must look like it belongs in the exact same presentation as the reference image - same colors, same glass treatment, same overall aesthetic.",
-  "style": "MATCH REFERENCE EXACTLY - Glassmorphism, visionOS aesthetic, same visual language",
-  "composition": "Asymmetric split: glass card left (40%), 3D visualization right (40%), breathing room between elements",
-  "color_palette": "EXACTLY match reference: purple #667eea, cyan #00d4ff gradient, same frosted white treatment, same text white",
-  "consistency_note": "CRITICAL: Must be visually identical in style to reference image. Same gradient colors, same glass blur intensity, same shadow treatment, same typography weight and style. Viewer should immediately recognize this as the same presentation."
+  "images": [
+    "/mnt/user-data/outputs/nova-slide-01.png"
+  ],
+  "size": "2K",
+  "output_format": "png",
+  "watermark": false
 }
 ```
 
 ```bash
-python /mnt/skills/public/image-generation/scripts/generate.py \
+python /mnt/skills/custom/volcano-image-generation/scripts/generate.py \
   --prompt-file /mnt/user-data/workspace/nova-slide-02.json \
-  --reference-images /mnt/user-data/outputs/nova-slide-01.jpg \
-  --output-file /mnt/user-data/outputs/nova-slide-02.jpg \
-  --aspect-ratio 16:9
+  --output-file /mnt/user-data/outputs/nova-slide-02.png \
+  --size 2K
 ```
 
-**Slides 3-5: Continue the same pattern, each referencing the previous slide**
+**Slides 3-5: Continue the same pattern, each putting the previous slide in `images`**
 
 Key consistency rules for subsequent slides:
+- Embed ALL visual details (style, color_palette, composition, typography, effects) into the `prompt` string
 - Always include "continuing EXACT visual style from reference image" in prompt
 - Specify "SAME gradient background", "SAME glass treatment", "SAME typography"
-- Include `consistency_note` emphasizing style matching
-- Reference the immediately previous slide image
+- Put the immediately previous slide path in the `images` array
 
 ### Step 4: Compose final PPT
 
 ```bash
 python /mnt/skills/public/ppt-generation/scripts/generate.py \
   --plan-file /mnt/user-data/workspace/nova-plan.json \
-  --slide-images /mnt/user-data/outputs/nova-slide-01.jpg /mnt/user-data/outputs/nova-slide-02.jpg /mnt/user-data/outputs/nova-slide-03.jpg /mnt/user-data/outputs/nova-slide-04.jpg /mnt/user-data/outputs/nova-slide-05.jpg \
+  --slide-images /mnt/user-data/outputs/nova-slide-01.png /mnt/user-data/outputs/nova-slide-02.png /mnt/user-data/outputs/nova-slide-03.png /mnt/user-data/outputs/nova-slide-04.png /mnt/user-data/outputs/nova-slide-05.png \
   --output-file /mnt/user-data/outputs/nova-presentation.pptx
 ```
 
@@ -436,7 +444,7 @@ After generation:
 - The first slide is critical - it establishes the visual language for the entire presentation
 - In every subsequent slide prompt, explicitly state: "continuing EXACT visual style from reference image"
 - Use SAME, EXACT, MATCH keywords emphatically in prompts to enforce consistency
-- Include a `consistency_note` field in every JSON prompt after slide 1
+- Embed ALL visual details (style, colors, composition, typography, effects, consistency instructions) into the single `prompt` field — volcano-image-generation uses a flat JSON format
 - If a slide looks inconsistent, regenerate it with STRONGER reference emphasis
 
 **Design Principles for Modern Aesthetics:**
@@ -450,7 +458,7 @@ After generation:
 - ❌ Generic prompts like "professional slide" - be specific
 - ❌ Too many elements/text per slide - cluttered = unprofessional
 - ❌ Inconsistent colors between slides - always reference previous slide
-- ❌ Skipping the reference image parameter - this breaks visual consistency
+- ❌ Skipping the `images` array in prompt JSON — this breaks visual consistency
 - ❌ Using different design styles within one presentation
 - ❌ Generating slides in parallel - slides MUST be generated one at a time in order (slide 1 → 2 → 3 ...), never concurrently
 
