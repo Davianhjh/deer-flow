@@ -371,6 +371,18 @@ export function InputBox({
     if (!lastAiId || lastAiId === lastGeneratedForAiIdRef.current) {
       return;
     }
+
+    // Skip suggestions when the last AI message has tool_calls — the
+    // conversation is mid-processing (tool execution, summarization, etc.).
+    // Only generate suggestions after the agent has completed its full reply.
+    if (
+      lastAi &&
+      "tool_calls" in lastAi &&
+      Array.isArray(lastAi.tool_calls) &&
+      lastAi.tool_calls.length > 0
+    ) {
+      return;
+    }
     lastGeneratedForAiIdRef.current = lastAiId;
 
     const recent = messagesRef.current
@@ -388,6 +400,7 @@ export function InputBox({
     }
 
     const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15_000);
     setFollowupsHidden(false);
     setFollowupsLoading(true);
     setFollowups([]);
@@ -416,13 +429,19 @@ export function InputBox({
         setFollowups(suggestions);
       })
       .catch(() => {
+        // Silently ignore any error (network failure, timeout, abort) —
+        // suggestions are a non-critical feature.
         setFollowups([]);
       })
       .finally(() => {
+        clearTimeout(timeoutId);
         setFollowupsLoading(false);
       });
 
-    return () => controller.abort();
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [context.model_name, disabled, isMock, status, threadId]);
 
   return (
