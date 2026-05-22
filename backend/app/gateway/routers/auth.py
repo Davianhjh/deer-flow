@@ -132,7 +132,19 @@ class MessageResponse(BaseModel):
 
 
 def _set_session_cookie(response: Response, token: str, request: Request) -> None:
-    """Set the access_token HttpOnly cookie on the response."""
+    """Set the access_token HttpOnly cookie on the response.
+
+    The cookie ``max_age`` always matches ``token_expiry_days`` regardless of
+    HTTPS status.  The JWT inside the cookie carries its own ``exp`` claim,
+    so a persistent cookie is safe even on HTTP connections — the server
+    will reject expired tokens at the JWT-validation layer.
+
+    Previously ``max_age`` was ``None`` on HTTP, making the cookie
+    session-scoped.  Session cookies are cleared when the browser session
+    ends, leading to "auto-login works but thread list is empty" after an
+    overnight session restore because the cookie may exist for SSR reads
+    but not for client-side ``fetch`` calls.
+    """
     config = get_auth_config()
     is_https = is_secure_request(request)
     response.set_cookie(
@@ -141,7 +153,7 @@ def _set_session_cookie(response: Response, token: str, request: Request) -> Non
         httponly=True,
         secure=is_https,
         samesite="lax",
-        max_age=config.token_expiry_days * 24 * 3600 if is_https else None,
+        max_age=config.token_expiry_days * 24 * 3600,
     )
 
 
